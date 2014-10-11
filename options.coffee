@@ -4,8 +4,9 @@
 module.exports =
   'output-homes': [
     '/Volumes/Storage/__NEW__'
+    '/tmp'
     '/Volumes/da bin ich'
-    '/Volumes/da ist er' ]
+    '/Volumes/hier ist er' ]
   #.........................................................................................................
   # Some of the formats available (see `man hdiutil`):
   # UDRW - UDIF read/write image

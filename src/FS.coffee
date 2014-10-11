@@ -4,10 +4,22 @@
 ############################################################################################################
 njs_path                  = require 'path'
 njs_fs                    = require 'fs'
+MKDIRP                    = require 'mkdirp'
 
 
 #===========================================================================================================
 # FILE SYSTEM
+#-----------------------------------------------------------------------------------------------------------
+### TAINT belongs to ROUTE ###
+@resolve_route = ( route ) ->
+  return njs_path.resolve process.cwd(), route
+
+#-----------------------------------------------------------------------------------------------------------
+@mkdirp = ( route, handler = null ) ->
+  ### TAINT should support MKDIRP options ###
+  return MKDIRP.sync route, handler if handler?
+  MKDIRP route, handler
+
 #-----------------------------------------------------------------------------------------------------------
 @names_in_folder = ( route, handler ) ->
   return njs_fs.readdirSync route unless handler?

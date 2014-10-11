@@ -3,9 +3,12 @@
 
 ############################################################################################################
 njs_path                  = require 'path'
-njs_fs                    = require 'fs'
 njs_os                    = require 'os'
 njs_spawn                 = ( require 'child_process' ).spawn
+#...........................................................................................................
+### TAINT temporary solution; should unify the two ###
+njs_fs                    = require 'fs-extra'
+FS                        = require './FS'
 #...........................................................................................................
 TRM                       = require 'coffeenode-trm'
 rpr                       = TRM.rpr.bind TRM
@@ -23,7 +26,6 @@ echo                      = TRM.echo.bind TRM
 ruler                     = ( new Array 108 ).join '─'
 fat_ruler                 = ( new Array 108 ).join '━'
 ASYNC                     = require 'async'
-FS                        = require './FS'
 #...........................................................................................................
 host_name                 = njs_os.hostname()
 host_name                 = host_name.replace '.fritz.box', ''
@@ -36,17 +38,27 @@ options                   = require '../options'
 @main = ->
   throw new Error "must give at least one project locator" if project_locators.length is 0
   #.........................................................................................................
+  backup_homes                  = []
+  primary_tasks                 = []
   [ primary_output_home
     secondary_output_homes... ] = options[ 'output-homes' ]
   @validate_route_is_folder primary_output_home
   #.........................................................................................................
+  info()
+  whisper fat_ruler
+  info 'COFFEENODE Backup Utility'
+  whisper ruler
+  #.........................................................................................................
+  for backup_home in secondary_output_homes
+    backup_homes.push backup_home if is_folder = FS.is_folder backup_home
+    help 'backup folder:        ', backup_home, TRM.truth is_folder
+  #.........................................................................................................
   for project_locator in project_locators
-    project_locator = project_locator.replace /\/+$/, ''
+    project_locator     = ( FS.resolve_route project_locator ).replace /\/+$/, ''
     @validate_route_is_folder project_locator
     #.......................................................................................................
-    project_name       = njs_path.basename project_locator
-    project_home       = njs_path.dirname  project_locator
-    #   project_name        = o.argv._[ 1 ] ? source_name
+    project_name        = njs_path.basename project_locator
+    project_home        = njs_path.dirname  project_locator
     #.......................................................................................................
     @validate_name project_name
     #.......................................................................................................
@@ -54,32 +66,37 @@ options                   = require '../options'
     archive_name        = "(#{host_name})_#{project_name}_#{timestamp}.dmg"
     archive_home        = njs_path.join primary_output_home, project_name
     archive_locator     = njs_path.join archive_home, archive_name
-    @validate_route_is_folder archive_home
+    @ensure_route_is_folder archive_home
     archive_exists      = FS.exists archive_locator
-    #.......................................................................................................
-    echo()
-    whisper fat_ruler
-    info 'COFFEENODE Backup Utility'
     whisper ruler
     help 'project-name:         ', project_name
     help 'project-locator:      ', project_locator
     help 'archive-locator:      ', archive_locator
     help 'archive-exists:       ', TRM.truth archive_exists
     #.......................................................................................................
-    commands_and_arguments  = []
-    tasks                   = []
-    unless archive_exists
-      commands_and_arguments.push @get_archiving_command_and_arguments project_locator, archive_locator
+    continue if archive_exists
+    command_and_arguments   = @get_archiving_command_and_arguments project_locator, archive_locator
     #.......................................................................................................
-    for command_and_arguments in commands_and_arguments
-      do ( command_and_arguments ) =>
-        tasks.push ( handler ) =>
-          @spawn command_and_arguments..., handler
-    #.......................................................................................................
-    ASYNC.series tasks, ( error, results ) ->
-      throw error if error?
-      whisper fat_ruler
-      echo 'All tasks have finished.'
+    do ( project_locator, archive_name, archive_locator, command_and_arguments ) =>
+      primary_tasks.push ( primary_handler ) =>
+        @spawn command_and_arguments..., ( error ) =>
+          return primary_handler error if error?
+          return primary_handler null if backup_homes.length is 0
+          secondary_tasks = []
+          for backup_home in backup_homes
+            do ( backup_home ) =>
+              secondary_tasks.push ( secondary_handler ) =>
+                backup_locator = njs_path.join backup_home, archive_name
+                njs_fs.copy archive_locator, backup_locator, ( error ) =>
+                  help "copied #{archive_locator} to #{backup_home}" unless error?
+                  secondary_handler error
+          ASYNC.parallelLimit secondary_tasks, 5, ( error ) =>
+            return primary_handler error
+  #.........................................................................................................
+  ASYNC.series primary_tasks, ( error, results ) ->
+    throw error if error?
+    whisper fat_ruler
+    help 'All tasks have finished.'
 
 
 #===========================================================================================================
@@ -89,22 +106,37 @@ options                   = require '../options'
   throw new Error "expected a text as route" unless ( Object::toString.call route ) is '[object String]'
   throw new Error "expected a non-empty text as route" if route.length is 0
   throw new Error "illegal route: #{rpr route}" unless ( route.match /[\s:"'\\<>|]/ ) is null
+  return null
 
 #-----------------------------------------------------------------------------------------------------------
 @validate_name = ( name ) ->
   throw new Error "expected a text as name" unless ( Object::toString.call name ) is '[object String]'
   throw new Error "expected a non-empty text as name" if name.length is 0
   throw new Error "illegal name: #{rpr name}" unless ( name.match /[\s:"'\\<>|\/]/ ) is null
+  return null
 
 #-----------------------------------------------------------------------------------------------------------
 @validate_route_is_folder = ( route ) ->
   @validate_route route
-  throw new Error "route #{rpr route} must point to existing folder" unless FS.is_folder route
+  unless FS.is_folder route
+    @complain "route #{rpr route} must point to existing folder" unless options[ 'create-folder' ] ? true
+  return null
+
+#-----------------------------------------------------------------------------------------------------------
+@ensure_route_is_folder = ( route ) ->
+  @validate_route route
+  unless FS.is_folder route
+    @complain "route #{rpr route} must point to existing folder" unless options[ 'create-folder' ] ? true
+    @complain "route #{rpr route} points to existing file" if FS.exists route
+    FS.mkdirp route
+    help "created folder at #{route}"
+  return null
 
 #-----------------------------------------------------------------------------------------------------------
 @validate_route_doesnt_exist = ( route ) ->
   @validate_route route
   throw new Error "route #{rpr route} already exists" if FS.exists route
+  return null
 
 #-----------------------------------------------------------------------------------------------------------
 @validate_archive_format = ( format ) ->
@@ -113,6 +145,12 @@ options                   = require '../options'
     when 'UDRW', 'UDRO', 'UDCO', 'UDZO', 'UDBZ', 'UFBI', 'UDTO', 'UDxx', 'UDSP', 'UDSB' then null
     else
       throw new Error "unknown format #{rpr format}"
+  return null
+
+#-----------------------------------------------------------------------------------------------------------
+@complain = ( message ) ->
+  warn message
+  process.exit()
 
 # #===========================================================================================================
 # # BASH
@@ -163,10 +201,12 @@ options                   = require '../options'
     handler error
   #.........................................................................................................
   R.stdout.on 'data', ( data_buffer ) =>
-    echo ( data_buffer.toString 'utf-8' ).trim()
+    ### TAINT strictly speaking, this could cause encoding errors: ###
+    text = ( data_buffer.toString 'utf-8' ).trim()
+    help text if text.length > 0
   #.........................................................................................................
   R.on 'close', ( code ) =>
-    echo 'OK'
+    # echo 'OK'
     handler null, null
   #.........................................................................................................
   return R
@@ -196,10 +236,6 @@ Y88b  d88P 888        888
   docopt    = ( require 'coffeenode-docopt' ).docopt
   version   = ( require '../package.json' )[ 'version' ]
   filename  = ( require 'path' ).basename __filename
-         # #{filename} pos [--sample] [<prefix>]
-# build DB;
-# erase with `fresh`;
-# include all codepoints with `all`
   usage     = """
   Usage: #{filename} <project-locators>...
 
@@ -213,7 +249,7 @@ Y88b  d88P 888        888
     # help collected
     help '\n' + usage
   #.........................................................................................................
-  debug cli_options
+  # debug cli_options
   settings = {}
   settings[ 'project-locators' ] = cli_options[ '<project-locators>' ]
   @main()
