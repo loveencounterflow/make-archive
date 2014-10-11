@@ -1,6 +1,6 @@
 {
   "name": "make-archive",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "produce mountable archives with ease (OSX only, sorry)",
   "main": "lib/main.js",
   "scripts": {
