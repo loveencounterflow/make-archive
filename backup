@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+
+
+cd /QUICK/io
+
+make-archive accentbx alpha-one arabika awesome-nodejs ccdict cnd cndoc coffeelibre \
+  coffeenode_chr_font_server coffeenode-bignumber coffeenode-bitsnpieces coffeenode-bsearch coffeenode-chr \
+  coffeenode-diff coffeenode-docopt coffeenode-documentor coffeenode-engine coffeenode-fillin coffeenode-fs \
+  coffeenode-limit coffeenode-mingkwai coffeenode-mojikura coffeenode-monitor coffeenode-multimix \
+  coffeenode-notifier coffeenode-options coffeenode-packrattle coffeenode-passphrase coffeenode-rss coffeenode-server \
+  coffeenode-solr coffeenode-stacktrace coffeenode-step coffeenode-sudo coffeenode-suspend coffeenode-tagtool \
+  coffeenode-teacup coffeenode-tex coffeenode-text coffeenode-tides coffeenode-timer coffeenode-userdb \
+  coffeexelatex copypaste cxltx cxltx-styles doc-hub drifter figlet-fonts flowmatic foo guy guy-test guy-trace \
+  hollerith how-to idlx jizura-datasources jizura-idlx jizura-main jizura-svg2ttf jizura-ucd jseq \
+  karabiner-keyremap4macbook-private.xml lodash make-archive mdx-tdop mingkwai mingkwai-app mingkwai-typesetter \
+  pipedreams pipedreams2 remarkable-dev remarkably SCRATCH soba soba-client soba-level-server soba-server \
+  svgttf tdop unused xregexp3
+
