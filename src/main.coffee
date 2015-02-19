@@ -10,29 +10,30 @@ njs_spawn                 = ( require 'child_process' ).spawn
 njs_fs                    = require 'fs-extra'
 FS                        = require './FS'
 #...........................................................................................................
-TRM                       = require 'coffeenode-trm'
-rpr                       = TRM.rpr.bind TRM
+CND                       = require 'cnd'
+rpr                       = CND.rpr.bind CND
 badge                     = 'make-archive'
-log                       = TRM.get_logger 'plain',   badge
-info                      = TRM.get_logger 'info',    badge
-alert                     = TRM.get_logger 'alert',   badge
-debug                     = TRM.get_logger 'debug',   badge
-warn                      = TRM.get_logger 'warn',    badge
-urge                      = TRM.get_logger 'urge',    badge
-whisper                   = TRM.get_logger 'whisper', badge
-help                      = TRM.get_logger 'help',    badge
-echo                      = TRM.echo.bind TRM
+log                       = CND.get_logger 'plain',   badge
+info                      = CND.get_logger 'info',    badge
+alert                     = CND.get_logger 'alert',   badge
+debug                     = CND.get_logger 'debug',   badge
+warn                      = CND.get_logger 'warn',    badge
+urge                      = CND.get_logger 'urge',    badge
+whisper                   = CND.get_logger 'whisper', badge
+help                      = CND.get_logger 'help',    badge
+echo                      = CND.echo.bind CND
 #...........................................................................................................
 ruler                     = ( new Array 108 ).join '─'
 fat_ruler                 = ( new Array 108 ).join '━'
 ASYNC                     = require 'async'
+glob                      = require 'glob'
 #...........................................................................................................
 host_name                 = njs_os.hostname()
 host_name                 = host_name.replace '.fritz.box', ''
 project_locators          = process.argv[ 2 ... ]
 #...........................................................................................................
 options                   = require '../options'
-
+dryrun                    = options[ 'dryrun' ] ? no
 
 #-----------------------------------------------------------------------------------------------------------
 @main = ->
@@ -51,7 +52,7 @@ options                   = require '../options'
   #.........................................................................................................
   for backup_home in secondary_output_homes
     backup_homes.push backup_home if is_folder = FS.is_folder backup_home
-    help 'backup folder:        ', backup_home, TRM.truth is_folder
+    help 'backup folder:        ', backup_home, CND.truth is_folder
   #.........................................................................................................
   for project_locator in project_locators
     project_locator     = ( FS.resolve_route project_locator ).replace /\/+$/, ''
@@ -63,7 +64,8 @@ options                   = require '../options'
     @validate_name project_name
     #.......................................................................................................
     timestamp           = FS.get_timestamp_of_newest_object_in_folder project_locator
-    archive_name        = "(#{host_name})_#{project_name}_#{timestamp}.dmg"
+    # archive_name        = "#{host_name}_#{project_name}_#{timestamp}.dmg"
+    archive_name        = "#{project_name}_#{timestamp}.dmg"
     archive_home        = njs_path.join primary_output_home, project_name
     archive_locator     = njs_path.join archive_home, archive_name
     @ensure_route_is_folder archive_home
@@ -72,7 +74,21 @@ options                   = require '../options'
     help 'project-name:         ', project_name
     help 'project-locator:      ', project_locator
     help 'archive-locator:      ', archive_locator
-    help 'archive-exists:       ', TRM.truth archive_exists
+    help 'archive-exists:       ', CND.truth archive_exists
+    #.......................................................................................................
+    for backup_home in backup_homes
+      backup_glob       = njs_path.join backup_home, "#{project_name}_*.dmg"
+      help 'backup folder:        ', backup_home
+      existing_backups  = glob.sync backup_glob
+      surplus_count     = Math.max 0, existing_backups.length - options[ 'max-backup-count' ]
+      surplus_count    += +1 unless archive_exists
+      surplus_count     = Math.min surplus_count, existing_backups.length
+      help "There are #{existing_backups.length} backups of this archive in #{backup_home}"
+      if surplus_count > 0
+        warn "#{surplus_count} of which will be removed"
+        for idx in [ 0 ... surplus_count ]
+          warn "removing #{existing_backups[ idx ]}"
+          njs_fs.unlinkSync existing_backups[ idx ] unless dryrun
     #.......................................................................................................
     continue if archive_exists
     command_and_arguments   = @get_archiving_command_and_arguments project_locator, archive_locator
@@ -87,9 +103,10 @@ options                   = require '../options'
             do ( backup_home ) =>
               secondary_tasks.push ( secondary_handler ) =>
                 backup_locator = njs_path.join backup_home, archive_name
-                njs_fs.copy archive_locator, backup_locator, ( error ) =>
-                  help "copied #{archive_locator} to #{backup_home}" unless error?
-                  secondary_handler error
+                @copy_with_rsync archive_locator, backup_locator, secondary_handler
+                # njs_fs.copy archive_locator, backup_locator, ( error ) =>
+                #   help "copied #{archive_locator} to #{backup_home}" unless error?
+                #   secondary_handler error
           ASYNC.parallelLimit secondary_tasks, 5, ( error ) =>
             return primary_handler error
   #.........................................................................................................
@@ -97,7 +114,6 @@ options                   = require '../options'
     throw error if error?
     whisper fat_ruler
     help 'All tasks have finished.'
-
 
 #===========================================================================================================
 # VALIDATORS
@@ -189,27 +205,60 @@ options                   = require '../options'
   return [ command, arguments_, ]
 
 #-----------------------------------------------------------------------------------------------------------
-@spawn = ( command, arguments_, handler ) ->
-  whisper fat_ruler
-  whisper command + ' ' + arguments_.join ' '
-  R = njs_spawn command, arguments_
-  #.........................................................................................................
-  R.on 'error', ( error ) =>
-    handler error
-  #.........................................................................................................
-  R.stderr.on 'data', ( error ) =>
-    handler error
-  #.........................................................................................................
-  R.stdout.on 'data', ( data_buffer ) =>
-    ### TAINT strictly speaking, this could cause encoding errors: ###
-    text = ( data_buffer.toString 'utf-8' ).trim()
-    help text if text.length > 0
-  #.........................................................................................................
-  R.on 'close', ( code ) =>
-    # echo 'OK'
+@copy_with_rsync = ( archive_locator, backup_locator, handler ) ->
+  help "using rsync to copy"
+  help "  from #{archive_locator}"
+  help "  to   #{backup_locator}"
+  @spawn ( @get_copy_command_and_arguments archive_locator, backup_locator )..., ( error ) =>
+    return handler error if error?
+    help 'ok'
+    handler null
+
+#-----------------------------------------------------------------------------------------------------------
+@get_copy_command_and_arguments = ( archive_locator, backup_locator ) ->
+  command     = 'rsync'
+  arguments_  = [
+    '-av'
+    '--progress'
+    archive_locator
+    backup_locator
+    ]
+  return [ command, arguments_, ]
+
+
+#-----------------------------------------------------------------------------------------------------------
+if dryrun
+  warn "dryrun"
+  #---------------------------------------------------------------------------------------------------------
+  @spawn = ( command, arguments_, handler ) ->
+    whisper fat_ruler
+    whisper command + ' ' + arguments_.join ' '
     handler null, null
-  #.........................................................................................................
-  return R
+    #.........................................................................................................
+    return null
+else
+  #---------------------------------------------------------------------------------------------------------
+  @spawn = ( command, arguments_, handler ) ->
+    whisper fat_ruler
+    whisper command + ' ' + arguments_.join ' '
+    R = njs_spawn command, arguments_, { stdio: 'inherit', }
+    # #.........................................................................................................
+    # R.on 'error', ( error ) =>
+    #   handler error
+    # #.........................................................................................................
+    # R.stderr.on 'data', ( error ) =>
+    #   handler error
+    # #.........................................................................................................
+    # R.stdout.on 'data', ( data_buffer ) =>
+    #   ### TAINT strictly speaking, this could cause encoding errors: ###
+    #   text = ( data_buffer.toString 'utf-8' ).trim()
+    #   help text if text.length > 0
+    #.......................................................................................................
+    R.on 'close', ( code ) =>
+      # echo 'OK'
+      handler null, null
+    #.......................................................................................................
+    return R
 
 ###
 #===========================================================================================================

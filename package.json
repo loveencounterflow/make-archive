@@ -25,10 +25,11 @@
   "homepage": "https://github.com/loveencounterflow/make-archive",
   "dependencies": {
     "async": "^0.9.0",
+    "cnd": "^0.1.5",
     "coffee-script": "^1.8.0",
     "coffeenode-docopt": "0.0.0",
-    "coffeenode-trm": "^0.1.20",
     "fs-extra": "^0.12.0",
+    "glob": "^4.4.0",
     "mkdirp": "^0.5.0"
   }
 }

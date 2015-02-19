@@ -3,10 +3,12 @@
 
 module.exports =
   'output-homes': [
-    '/Volumes/Storage/__NEW__'
-    '/tmp'
+    '/Volumes/Storage/archive'
     '/Volumes/da bin ich'
-    '/Volumes/hier ist er' ]
+    '/Volumes/mercury/archive'
+    '/Volumes/hier ist er'
+    # '/Users/flow/Dropbox'
+    ]
   #.........................................................................................................
   # Some of the formats available (see `man hdiutil`):
   # UDRW - UDIF read/write image
@@ -19,4 +21,7 @@ module.exports =
   # UDxx - UDIF stub image
   # UDSP - SPARSE (grows with content)
   # UDSB - SPARSEBUNDLE (grows with content; bundle-backed)
-  'archive-format': 'UDBZ'
+  # 'archive-format': 'UDBZ'
+  'archive-format': 'UDRW'
+  # 'dryrun':         yes
+  'max-backup-count': 3

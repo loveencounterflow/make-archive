@@ -74,7 +74,7 @@ MKDIRP                    = require 'mkdirp'
   try
     return if follow_links then njs_fs.statSync route else njs_fs.lstatSync route
   catch error
-    throw error unless ( error[ 'message' ].indexOf 'ENOENT, no such file or directory ' ) == 0
+    throw error unless error[ 'code' ] is 'ENOENT'
     return null
 
 #-----------------------------------------------------------------------------------------------------------
